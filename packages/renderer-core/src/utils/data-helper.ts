@@ -4,8 +4,8 @@
 import { isJSFunction } from '@alilc/lowcode-types';
 import { transformArrayToMap, transformStringToFunction, clone } from './common';
 import { jsonp, request, get, post } from './request';
-import { DataSource, DataSourceItem, IRendererAppHelper } from '../types';
 import logger from './logger';
+import { DataSource, DataSourceItem, IRendererAppHelper } from '../types';
 
 const DS_STATUS = {
   INIT: 'init',
