@@ -5,6 +5,7 @@ import { isJSFunction } from '@alilc/lowcode-types';
 import { transformArrayToMap, transformStringToFunction, clone } from './common';
 import { jsonp, request, get, post } from './request';
 import { DataSource, DataSourceItem, IRendererAppHelper } from '../types';
+import logger from './logger';
 
 const DS_STATUS = {
   INIT: 'init',
@@ -224,7 +225,7 @@ export class DataHelper {
       const _tb_token_ = (csrfInput as any)?.value;
       asyncDataList.forEach((req) => {
         const { id, type, options } = req;
-        if (!id || !type) return;
+        if (!id || !type || type === 'legao') return;
         if (type === 'doServer') {
           const { uri, params } = options || {};
           if (!uri) return;
@@ -355,7 +356,7 @@ export class DataHelper {
       }
     }
 
-    console.error(`Engine default dataSource not support type:[${type}] dataSource request!`);
+    logger.log(`Engine default dataSource not support type:[${type}] dataSource request!`, options);
   }
 }
 
