@@ -177,8 +177,8 @@ export class DataHelper {
     const initSyncData = this.getInitDataSourseConfigs();
     // 所有 datasource 的 datahandler
     return this.asyncDataHandler(initSyncData).then((res) => {
-      let { dataHandler } = this.config;
-      this.handleData(null, dataHandler, res, null);
+      const { dataHandler } = this.config;
+      return this.handleData(null, dataHandler, res, null);
     });
   }
 
@@ -255,7 +255,7 @@ export class DataHelper {
       Promise.all(
         allReq.map((item: any) => {
           return new Promise((innerResolve) => {
-            const { id, dataHandler } = item;
+            const { type, id, dataHandler, options } = item;
 
             const fetchHandler = (data: any, error: any) => {
               res[id] = this.handleData(id, dataHandler, data, error);
@@ -263,8 +263,8 @@ export class DataHelper {
               innerResolve({});
             };
 
-            const doFetch = (type: string, options: any) => {
-              doRequest(type as any, options)
+            const doFetch = (innerType: string, innerOptions: any) => {
+              doRequest(innerType as any, innerOptions)
                 ?.then((data: any) => {
                   if (this.appHelper && this.appHelper.utils && this.appHelper.utils.afterRequest) {
                     this.appHelper.utils.afterRequest(item, data, undefined, (innerData: any, error: any) => {
@@ -290,7 +290,7 @@ export class DataHelper {
             // 请求切片
             if (this.appHelper && this.appHelper.utils && this.appHelper.utils.beforeRequest) {
               // 必须要这么调用，否则beforeRequest中的this会丢失
-              this.appHelper.utils.beforeRequest(item, clone(options), (options: any) => doFetch(type, options));
+              this.appHelper.utils.beforeRequest(item, clone(options), (opts: any) => doFetch(type, opts));
             } else {
               doFetch(type, options);
             }
