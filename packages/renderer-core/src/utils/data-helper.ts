@@ -178,15 +178,7 @@ export class DataHelper {
     // 所有 datasource 的 datahandler
     return this.asyncDataHandler(initSyncData).then((res) => {
       let { dataHandler } = this.config;
-      if (isJSFunction(dataHandler)) {
-        dataHandler = transformStringToFunction(dataHandler.value);
-      }
-      if (!dataHandler || typeof dataHandler !== 'function') return res;
-      try {
-        return (dataHandler as any).call(this.host, res);
-      } catch (e) {
-        console.error('请求数据处理函数运行出错', e);
-      }
+      this.handleData(null, dataHandler, res, null);
     });
   }
 
@@ -266,7 +258,7 @@ export class DataHelper {
             const { id, dataHandler } = item;
 
             const fetchHandler = (data: any, error: any) => {
-              res[id] = this.dataHandler(id, dataHandler, data, error);
+              res[id] = this.handleData(id, dataHandler, data, error);
               this.updateDataSourceMap(id, res[id], error);
               innerResolve({});
             };
@@ -313,7 +305,7 @@ export class DataHelper {
   }
 
   // dataHandler todo:
-  dataHandler(id: string, dataHandler: any, data: any, error: any) {
+  handleData(id: string | null, dataHandler: any, data: any, error: any) {
     let dataHandlerFun = dataHandler;
     if (isJSFunction(dataHandler)) {
       dataHandlerFun = transformStringToFunction(dataHandler.value);
@@ -322,9 +314,13 @@ export class DataHelper {
       return data;
     }
     try {
-      return dataHandler.call(this.host, data, error);
+      return dataHandlerFun.call(this.host, data, error);
     } catch (e) {
-      console.error(`[${id}]单个请求数据处理函数运行出错`, e);
+      if (id) {
+        console.error(`[${id}]单个请求数据处理函数运行出错`, e);
+      } else {
+        console.error('请求数据处理函数运行出错', e);
+      }
     }
   }
 }
