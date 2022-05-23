@@ -14,6 +14,35 @@ const DS_STATUS = {
   ERROR: 'error',
 };
 
+type DataSourceType = 'fetch' | 'jsonp';
+
+/**
+ * do request for standard DataSourceType
+ * @param {DataSourceType} type type of DataSourceItem
+ * @param {any} options
+ */
+export function doRequest(type: DataSourceType, options: any) {
+  // eslint-disable-next-line prefer-const
+  let { uri, url, method = 'GET', headers, params, ...otherProps } = options;
+  otherProps = otherProps || {};
+  if (type === 'jsonp') {
+    return jsonp(uri, params, otherProps);
+  }
+
+  if (type === 'fetch') {
+    switch (method.toUpperCase()) {
+      case 'GET':
+        return get(uri, params, headers, otherProps);
+      case 'POST':
+        return post(uri, params, headers, otherProps);
+      default:
+        return request(uri, method, params, headers, otherProps);
+    }
+  }
+
+  logger.log(`Engine default dataSource does not support type:[${type}] dataSource request!`, options);
+}
+
 export class DataHelper {
   /**
    * host object that will be "this" object when excuting dataHandler
@@ -216,97 +245,58 @@ export class DataHelper {
 
   asyncDataHandler(asyncDataList: any[]) {
     return new Promise((resolve, reject) => {
-      const allReq = [];
-      const doserReq: Array<{name: string; package: string; params: any }> = [];
-      const doserList: string[] = [];
-      const beforeRequest = this.appHelper && this.appHelper.utils && this.appHelper.utils.beforeRequest;
-      const afterRequest = this.appHelper && this.appHelper.utils && this.appHelper.utils.afterRequest;
-      const csrfInput = document.getElementById('_csrf_token');
-      const _tb_token_ = (csrfInput as any)?.value;
+      const allReq: any[] = [];
       asyncDataList.forEach((req) => {
-        const { id, type, options } = req;
-        if (!id || !type || type === 'legao') return;
-        if (type === 'doServer') {
-          const { uri, params } = options || {};
-          if (!uri) return;
-          doserList.push(id);
-          doserReq.push({ name: uri, package: 'cms', params });
-        } else {
-          allReq.push(req);
+        const { id, type } = req;
+        // TODO: need refactoring to remove 'legao' related logic
+        if (!id || !type || type === 'legao') {
+          return;
         }
+        allReq.push(req);
       });
 
-      if (doserReq.length > 0) {
-        allReq.push({
-          type: 'doServer',
-          options: {
-            uri: '/nrsService.do',
-            cors: true,
-            method: 'POST',
-            params: {
-              data: JSON.stringify(doserReq),
-              _tb_token_,
-            },
-          },
-        });
+      if (allReq.length === 0) {
+        resolve({});
       }
-      if (allReq.length === 0) resolve({});
       const res: any = {};
-      // todo:
+
       Promise.all(
         allReq.map((item: any) => {
-          return new Promise((resolve) => {
-            const { type, id, dataHandler, options } = item;
+          return new Promise((innerResolve) => {
+            const { id, dataHandler } = item;
+
+            const fetchHandler = (data: any, error: any) => {
+              res[id] = this.dataHandler(id, dataHandler, data, error);
+              this.updateDataSourceMap(id, res[id], error);
+              innerResolve({});
+            };
+
             const doFetch = (type: string, options: any) => {
-              this.fetchOne(type as any, options)
+              doRequest(type as any, options)
                 ?.then((data: any) => {
-                  if (afterRequest) {
-                    this.appHelper.utils.afterRequest(item, data, undefined, (data: any, error: any) => {
-                      fetchHandler(data, error);
+                  if (this.appHelper && this.appHelper.utils && this.appHelper.utils.afterRequest) {
+                    this.appHelper.utils.afterRequest(item, data, undefined, (innerData: any, error: any) => {
+                      fetchHandler(innerData, error);
                     });
                   } else {
                     fetchHandler(data, undefined);
                   }
                 })
                 .catch((err: Error) => {
-                  if (afterRequest) {
+                  if (this.appHelper && this.appHelper.utils && this.appHelper.utils.afterRequest) {
                     // 必须要这么调用，否则beforeRequest中的this会丢失
-                    this.appHelper.utils.afterRequest(item, undefined, err, (data: any, error: any) => {
-                      fetchHandler(data, error);
+                    this.appHelper.utils.afterRequest(item, undefined, err, (innerData: any, error: any) => {
+                      fetchHandler(innerData, error);
                     });
                   } else {
                     fetchHandler(undefined, err);
                   }
                 });
             };
-            const fetchHandler = (data: any, error: any) => {
-              if (type === 'doServer') {
-                if (!Array.isArray(data)) {
-                  data = [data];
-                }
-                doserList.forEach((id, idx) => {
-                  const req: any = this.ajaxMap[id];
-                  if (req) {
-                    res[id] = this.dataHandler(id, req.dataHandler, data && data[idx], error);
-                    this.updateDataSourceMap(id, res[id], error);
-                  }
-                });
-              } else {
-                res[id] = this.dataHandler(id, dataHandler, data, error);
-                this.updateDataSourceMap(id, res[id], error);
-              }
-              resolve({});
-            };
 
-            if (type === 'doServer') {
-              doserList.forEach((item) => {
-                this.dataSourceMap[item].status = DS_STATUS.LOADING;
-              });
-            } else {
-              this.dataSourceMap[id].status = DS_STATUS.LOADING;
-            }
+            this.dataSourceMap[id].status = DS_STATUS.LOADING;
             // 请求切片
-            if (beforeRequest) {
+            if (this.appHelper && this.appHelper.utils && this.appHelper.utils.beforeRequest) {
               // 必须要这么调用，否则beforeRequest中的this会丢失
               this.appHelper.utils.beforeRequest(item, clone(options), (options: any) => doFetch(type, options));
             } else {
@@ -314,50 +304,27 @@ export class DataHelper {
             }
           });
         }),
-      )
-        .then(() => {
-          resolve(res);
-        })
-        .catch((e) => {
-          reject(e);
-        });
+      ).then(() => {
+        resolve(res);
+      }).catch((e) => {
+        reject(e);
+      });
     });
   }
 
   // dataHandler todo:
   dataHandler(id: string, dataHandler: any, data: any, error: any) {
+    let dataHandlerFun = dataHandler;
     if (isJSFunction(dataHandler)) {
-      dataHandler = transformStringToFunction(dataHandler.value);
+      dataHandlerFun = transformStringToFunction(dataHandler.value);
     }
-    if (!dataHandler || typeof dataHandler !== 'function') return data;
+    if (!dataHandlerFun || typeof dataHandlerFun !== 'function') {
+      return data;
+    }
     try {
       return dataHandler.call(this.host, data, error);
     } catch (e) {
       console.error(`[${id}]单个请求数据处理函数运行出错`, e);
     }
   }
-
-  fetchOne(type: DataSourceType, options: any) {
-    // eslint-disable-next-line prefer-const
-    let { uri, url, method = 'GET', headers, params, ...otherProps } = options;
-    otherProps = otherProps || {};
-    if (type === 'jsonp') {
-      return jsonp(uri, params, otherProps);
-    }
-
-    if (type === 'fetch') {
-      switch (method.toUpperCase()) {
-        case 'GET':
-          return get(uri, params, headers, otherProps);
-        case 'POST':
-          return post(uri, params, headers, otherProps);
-        default:
-          return request(uri, method, params, headers, otherProps);
-      }
-    }
-
-    logger.log(`Engine default dataSource not support type:[${type}] dataSource request!`, options);
-  }
 }
-
-type DataSourceType = 'fetch' | 'jsonp';

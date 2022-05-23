@@ -1,9 +1,24 @@
 // @ts-nocheck
-import { DataHelper } from '../../src/utils/data-helper';
+const mockJsonp = jest.fn();
+const mockRequest = jest.fn();
+const mockGet = jest.fn();
+const mockPost = jest.fn();
+jest.mock('../../src/utils/request', () => {
+    return {
+      jsonp: () => { mockJsonp();},
+      request: () => { mockRequest();},
+      get: () => { mockGet();},
+      post: () => { mockPost();},
+    }
+  });
+
+import { DataHelper, doRequest } from '../../src/utils/data-helper';
 import { parseData } from '../../src/utils/common';
 
-
 describe('test DataHelper ', () => {
+  beforeEach(() => {
+    jest.resetModules();
+  })
   it('can be inited', () => {
     const mockHost = {};
     let mockDataSourceConfig = {};
@@ -38,7 +53,7 @@ describe('test DataHelper ', () => {
       id: 'ds1',
     });
   });
-  it('should handle generateDataSourceMap properly', () => {
+  it('should handle generateDataSourceMap properly in constructor', () => {
     const mockHost = {};
     let mockDataSourceConfig = {};
     const mockAppHelper = {};
@@ -77,7 +92,7 @@ describe('test DataHelper ', () => {
     expect(typeof dataHelper.dataSourceMap.getInfo.load).toBe('function');
   });
 
-  it('getInitData should work', () => {
+  it('getInitDataSourseConfigs should work', () => {
     const mockHost = {};
     let mockDataSourceConfig = {};
     const mockAppHelper = {};
@@ -133,8 +148,107 @@ describe('test DataHelper ', () => {
       ],
     };
 
-    let dataHelper = new DataHelper(mockHost, mockDataSourceConfig, mockAppHelper, mockParser);
+    const dataHelper = new DataHelper(mockHost, mockDataSourceConfig, mockAppHelper, mockParser);
     expect(dataHelper.getInitDataSourseConfigs().length).toBe(1);
     expect(dataHelper.getInitDataSourseConfigs()[0].id).toBe('getInfo');
+  });
+  it('util function doRequest should work', () => {
+    doRequest('jsonp', {
+      uri: 'https://www.baidu.com',
+      params: { a: 1 },
+      otherStuff1: 'aaa',
+    });
+    expect(mockJsonp).toBeCalled();
+
+    // test GET
+    doRequest('fetch', {
+      uri: 'https://www.baidu.com',
+      method: 'get',
+      params: { a: 1 },
+      otherStuff1: 'aaa',
+    });
+    expect(mockGet).toBeCalled();
+
+    mockGet.mockClear();
+    doRequest('fetch', {
+      uri: 'https://www.baidu.com',
+      method: 'Get',
+      params: { a: 1 },
+      otherStuff1: 'aaa',
+    });
+    expect(mockGet).toBeCalled();
+
+    mockGet.mockClear();
+    doRequest('fetch', {
+      uri: 'https://www.baidu.com',
+      method: 'GET',
+      params: { a: 1 },
+      otherStuff1: 'aaa',
+    });
+    expect(mockGet).toBeCalled();
+
+    mockGet.mockClear();
+
+    // test POST
+    doRequest('fetch', {
+      uri: 'https://www.baidu.com',
+      method: 'post',
+      params: { a: 1 },
+      otherStuff1: 'aaa',
+    });
+    expect(mockPost).toBeCalled();
+    mockPost.mockClear();
+
+    doRequest('fetch', {
+      uri: 'https://www.baidu.com',
+      method: 'POST',
+      params: { a: 1 },
+      otherStuff1: 'aaa',
+    });
+    expect(mockPost).toBeCalled();
+    mockPost.mockClear();
+    doRequest('fetch', {
+      uri: 'https://www.baidu.com',
+      method: 'Post',
+      params: { a: 1 },
+      otherStuff1: 'aaa',
+    });
+    expect(mockPost).toBeCalled();
+    mockPost.mockClear();
+
+    // test default
+    doRequest('fetch', {
+      uri: 'https://www.baidu.com',
+      method: 'whatever',
+      params: { a: 1 },
+      otherStuff1: 'aaa',
+    });
+    expect(mockRequest).toBeCalled();
+    mockRequest.mockClear();
+    mockGet.mockClear();
+    
+    // method will be GET when not provided
+    doRequest('fetch', {
+      uri: 'https://www.baidu.com',
+      params: { a: 1 },
+      otherStuff1: 'aaa',
+    });
+    expect(mockRequest).toBeCalledTimes(0);
+    expect(mockGet).toBeCalledTimes(1);
+
+    mockRequest.mockClear();
+    mockGet.mockClear();
+    mockPost.mockClear();
+    mockJsonp.mockClear();
+
+    doRequest('someOtherType', {
+      uri: 'https://www.baidu.com',
+      params: { a: 1 },
+      otherStuff1: 'aaa',
+    });
+    expect(mockRequest).toBeCalledTimes(0);
+    expect(mockGet).toBeCalledTimes(0);
+    expect(mockPost).toBeCalledTimes(0);
+    expect(mockJsonp).toBeCalledTimes(0);
   });
 });
