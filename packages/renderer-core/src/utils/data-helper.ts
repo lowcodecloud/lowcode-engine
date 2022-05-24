@@ -2,7 +2,7 @@
 /* eslint-disable max-len */
 /* eslint-disable object-curly-newline */
 import { isJSFunction } from '@alilc/lowcode-types';
-import { transformArrayToMap, transformStringToFunction, clone } from './common';
+import { transformArrayToMap, transformStringToFunction } from './common';
 import { jsonp, request, get, post } from './request';
 import logger from './logger';
 import { DataSource, DataSourceItem, IRendererAppHelper } from '../types';
@@ -43,6 +43,7 @@ export function doRequest(type: DataSourceType, options: any) {
   logger.log(`Engine default dataSource does not support type:[${type}] dataSource request!`, options);
 }
 
+// TODO: according to protocol, we should implement errorHandler/shouldFetch/willFetch/requestHandler and isSync controll.
 export class DataHelper {
   /**
    * host object that will be "this" object when excuting dataHandler
@@ -135,6 +136,7 @@ export class DataHelper {
       res[item.id] = {
         status: DS_STATUS.INIT,
         load: (...args: any) => {
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
           // @ts-ignore
           return this.getDataSource(item.id, ...args);
         },
@@ -185,15 +187,18 @@ export class DataHelper {
   getDataSource(id: string, params: any, otherOptions: any, callback: any) {
     const req = this.parser(this.ajaxMap[id]);
     const options = req.options || {};
+    let callbackFn = callback;
+    let otherOptionsObj = otherOptions;
     if (typeof otherOptions === 'function') {
-      callback = otherOptions;
-      otherOptions = {};
+      callbackFn = otherOptions;
+      otherOptionsObj = {};
     }
-    const { headers, ...otherProps } = otherOptions || {};
+    const { headers, ...otherProps } = otherOptionsObj || {};
     if (!req) {
       console.warn(`getDataSource API named ${id} not exist`);
       return;
     }
+
     return this.asyncDataHandler([
       {
         ...req,
@@ -215,24 +220,22 @@ export class DataHelper {
         },
       },
     ])
-      .then((res: any) => {
-        try {
-          callback && callback(res && res[id]);
-        } catch (e) {
-          console.error('load请求回调函数报错', e);
-        }
-
-        return res && res[id];
-      })
-      .catch((err) => {
-        try {
-          callback && callback(null, err);
-        } catch (e) {
-          console.error('load请求回调函数报错', e);
-        }
-
-        return err;
-      });
+    .then((res: any) => {
+      try {
+        callbackFn && callbackFn(res && res[id]);
+      } catch (e) {
+        console.error('load请求回调函数报错', e);
+      }
+      return res && res[id];
+    })
+    .catch((err) => {
+      try {
+        callbackFn && callbackFn(null, err);
+      } catch (e) {
+        console.error('load请求回调函数报错', e);
+      }
+      return err;
+    });
   }
 
   asyncDataHandler(asyncDataList: any[]) {
@@ -266,34 +269,15 @@ export class DataHelper {
             const doFetch = (innerType: string, innerOptions: any) => {
               doRequest(innerType as any, innerOptions)
                 ?.then((data: any) => {
-                  if (this.appHelper && this.appHelper.utils && this.appHelper.utils.afterRequest) {
-                    this.appHelper.utils.afterRequest(item, data, undefined, (innerData: any, error: any) => {
-                      fetchHandler(innerData, error);
-                    });
-                  } else {
-                    fetchHandler(data, undefined);
-                  }
+                  fetchHandler(data, undefined);
                 })
                 .catch((err: Error) => {
-                  if (this.appHelper && this.appHelper.utils && this.appHelper.utils.afterRequest) {
-                    // 必须要这么调用，否则beforeRequest中的this会丢失
-                    this.appHelper.utils.afterRequest(item, undefined, err, (innerData: any, error: any) => {
-                      fetchHandler(innerData, error);
-                    });
-                  } else {
-                    fetchHandler(undefined, err);
-                  }
+                  fetchHandler(undefined, err);
                 });
             };
 
             this.dataSourceMap[id].status = DS_STATUS.LOADING;
-            // 请求切片
-            if (this.appHelper && this.appHelper.utils && this.appHelper.utils.beforeRequest) {
-              // 必须要这么调用，否则beforeRequest中的this会丢失
-              this.appHelper.utils.beforeRequest(item, clone(options), (opts: any) => doFetch(type, opts));
-            } else {
-              doFetch(type, options);
-            }
+            doFetch(type, options);
           });
         }),
       ).then(() => {
@@ -304,7 +288,16 @@ export class DataHelper {
     });
   }
 
-  // dataHandler todo:
+  /**
+   * process data using dataHandler
+   *
+   * @param {(string | null)} id request id, will be used in error message, can be null
+   * @param {*} dataHandler
+   * @param {*} data
+   * @param {*} error
+   * @returns
+   * @memberof DataHelper
+   */
   handleData(id: string | null, dataHandler: any, data: any, error: any) {
     let dataHandlerFun = dataHandler;
     if (isJSFunction(dataHandler)) {

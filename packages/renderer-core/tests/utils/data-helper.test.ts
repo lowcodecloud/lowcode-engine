@@ -251,4 +251,33 @@ describe('test DataHelper ', () => {
     expect(mockPost).toBeCalledTimes(0);
     expect(mockJsonp).toBeCalledTimes(0);
   });
+  it('updateDataSourceMap should work', () => {
+    const mockHost = {};
+    const mockDataSourceConfig = { 
+      list: [ 
+        {
+          id: 'ds1',
+        }, {
+          id: 'ds2',
+        },
+      ]
+    };
+    const mockAppHelper = {};
+    const mockParser = (config: any) => parseData(config);
+    const dataHelper = new DataHelper(mockHost, mockDataSourceConfig, mockAppHelper, mockParser);
+    dataHelper.updateDataSourceMap('ds1', { a: 1 }, null);
+    expect(dataHelper.dataSourceMap['ds1']).toBeTruthy();
+    expect(dataHelper.dataSourceMap['ds1'].data).toStrictEqual({ a: 1 });
+    expect(dataHelper.dataSourceMap['ds1'].error).toBeUndefined();
+    expect(dataHelper.dataSourceMap['ds1'].status).toBe('loaded');
+    dataHelper.updateDataSourceMap('ds2', { b: 2 }, new Error());
+    expect(dataHelper.dataSourceMap['ds2']).toBeTruthy();
+    expect(dataHelper.dataSourceMap['ds2'].data).toStrictEqual({ b: 2 });
+    expect(dataHelper.dataSourceMap['ds2'].status).toBe('error');
+    expect(dataHelper.dataSourceMap['ds2'].error).toBeTruthy();
+  });
+
+  it('handleData should work', () => {
+    
+  });
 });
