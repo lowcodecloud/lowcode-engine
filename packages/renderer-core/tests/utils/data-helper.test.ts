@@ -278,6 +278,81 @@ describe('test DataHelper ', () => {
   });
 
   it('handleData should work', () => {
-    
+    const mockHost = { stateA: 'aValue'};
+    const mockDataSourceConfig = { 
+      list: [
+        {
+          id: 'fullConfigGet',
+          isInit: true,
+          options: {
+            params: {},
+            method: 'GET',
+            isCors: true,
+            timeout: 5000,
+            headers: {},
+            uri: 'mock/info.json',
+          },
+          shouldFetch: {
+            type: 'JSFunction',
+            value: 'function() { return true; }',
+          },
+          dataHandler: {
+            type: 'JSFunction',
+            value: 'function(res) { return res.data; }',
+          },
+          errorHandler: {
+            type: 'JSFunction',
+            value: 'function(error) {}',
+          },
+          willFetch: {
+            type: 'JSFunction',
+            value: 'function(options) { return options; }',
+          },
+        },
+      ]
+    };
+    const mockAppHelper = {};
+    const mockParser = (config: any) => parseData(config);
+    const dataHelper = new DataHelper(mockHost, mockDataSourceConfig, mockAppHelper, mockParser);
+    // test valid case
+    let mockDataHandler = {
+      type: 'JSFunction',
+      value: 'function(res) { return res.data + \'+\' + this.stateA; }',
+    };
+    let result = dataHelper.handleData('fullConfigGet', mockDataHandler, { data: 'mockDataValue' }, null);
+    expect(result).toBe('mockDataValue+aValue');
+
+    // test invalid datahandler
+    mockDataHandler = {
+      type: 'not a JSFunction',
+      value: 'function(res) { return res.data + \'+\' + this.stateA; }',
+    };
+    result = dataHelper.handleData('fullConfigGet', mockDataHandler, { data: 'mockDataValue' }, null);
+    expect(result).toStrictEqual({ data: 'mockDataValue' });
+
+    // test exception
+    const mockError = jest.fn();
+    const orginalConsole = global.console;
+    global.console = { error: mockError };
+
+    // exception with id
+    mockDataHandler = {
+      type: 'JSFunction',
+      value: 'function(res) { return res.data + \'+\' + JSON.parse({a:1}); }',
+    };
+    result = dataHelper.handleData('fullConfigGet', mockDataHandler, { data: 'mockDataValue' }, null);
+    expect(result).toBeUndefined();
+    expect(mockError).toBeCalledWith('[fullConfigGet]单个请求数据处理函数运行出错', expect.anything());
+
+    // exception without id
+    mockDataHandler = {
+      type: 'JSFunction',
+      value: 'function(res) { return res.data + \'+\' + JSON.parse({a:1}); }',
+    };
+    result = dataHelper.handleData(null, mockDataHandler, { data: 'mockDataValue' }, null);
+    expect(result).toBeUndefined();
+    expect(mockError).toBeCalledWith('请求数据处理函数运行出错', expect.anything());
+
+    global.console = orginalConsole;
   });
 });
